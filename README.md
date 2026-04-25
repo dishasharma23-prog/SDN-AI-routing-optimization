@@ -7,7 +7,7 @@
 
 ![Performance Comparison](results.png)
 
-> **The core idea:** Every existing fuzzy routing paper picks the best-performing node — then checks if it's safe. We flip that. Security runs first. A compromised node scores zero and cannot be selected, no matter how fast it is.
+> **The core idea:** Every existing fuzzy routing paper picks the best-performing node and then checks if it's safe. We flip that. Security runs first. A compromised node scores zero and cannot be selected, no matter how fast it is.
 
 ---
 
