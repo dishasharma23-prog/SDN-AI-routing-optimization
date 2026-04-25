@@ -129,6 +129,21 @@ Traditional routing protocols optimize for performance alone. This project demon
 
 ---
 
+## How to Run
+
+### Requirements
+- Mininet
+- Python 3
+- Ryu Controller
+
+### Run Sprint Topology
+sudo python3 sprint_topology/sprint_topology.py
+
+### Run Fat Tree Topology
+sudo python3 fat_tree_topology/fat_tree_topology.py
+
+---
+
 ## Author
 
 Disha Sharma  
