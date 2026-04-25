@@ -1,150 +1,192 @@
-# Network Optimization in SDN using Fuzzy logic AI-Based Routing
+# Network Optimization in SDN using Fuzzy Logic & Security-Aware Routing
 
-## Overview
+![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)
+![Mininet](https://img.shields.io/badge/Mininet-SDN-blue?style=flat)
+![Ryu](https://img.shields.io/badge/Controller-Ryu%20OpenFlow-orange?style=flat)
+![Status](https://img.shields.io/badge/Status-Research%20Prototype-green?style=flat)
 
-Software Defined Networking (SDN) enables centralized control over network routing, allowing for intelligent decision-making using global network state.
+![Performance Comparison](results.png)
 
-This project focuses on optimizing routing in SDN using a combination of fuzzy logic and a security-aware pipeline. Unlike traditional approaches that prioritize only performance metrics, this system integrates security validation directly into routing decisions.
-
-The objective is to ensure that only trusted nodes participate in routing, even if compromised nodes appear optimal based on performance.
-
----
-
-## Key Contributions
-
-- Designed a hybrid routing system combining:
-  - Fuzzy logic-based scoring
-  - Security-aware node validation
-- Implemented a 6-step authentication pipeline to verify node trust
-- Introduced a trust-based multiplier to eliminate compromised nodes from routing
-- Demonstrated path deviation when high-performing nodes fail security checks
-- Compared performance against traditional protocols (OSPF and RIP)
+> **The core idea:** Every existing fuzzy routing paper picks the best-performing node — then checks if it's safe. We flip that. Security runs first. A compromised node scores zero and cannot be selected, no matter how fast it is.
 
 ---
 
-## System Architecture
+## What This Project Does
 
-The system follows a three-stage decision pipeline:
+Traditional SDN routing protocols (OSPF, RIP) optimize for speed and bandwidth. They have no concept of node trust. If the highest-performing node in your network has been compromised, they'll route traffic through it anyway.
 
-1. Security validation (6-step pipeline)
-2. Fuzzy logic-based scoring
-3. Trust-weighted routing decision
+This project builds a routing system that integrates a **6-step security pipeline directly into the routing score**. Nodes that fail authentication get a trust multiplier of zero — wiping out their score entirely before routing even begins.
 
-Nodes that fail security validation are assigned a score of zero and excluded from routing.
+**The result in one line:** h4 scored 79.74 (best node in the network). It got rejected at step 2. The system routed through h3 (score 75.2) instead. OSPF and RIP would have used h4 every single time.
 
 ---
 
-## Security Pipeline
+## Key Results
 
-Each node undergoes the following checks before being considered:
+Tested on the Sprint ISP topology (11 nodes, 18 links, 1 Mbps per link) under heavy load (800 Kbps per flow), with h2 and h4 set as compromised nodes:
 
-1. Subnet validation  
-2. Blacklist verification  
-3. Certificate validity check  
-4. Certificate pinning  
-5. Certificate Revocation List (CRL) check  
-6. HMAC-based challenge-response authentication  
-
-Failure at any stage results in immediate rejection.
-
-As described in the project report, nodes such as h2 and h4 were intentionally compromised and assigned a final score of zero despite high performance scores. :contentReference[oaicite:0]{index=0}
+| Metric | OSPF | RIP | Fuzzy (Ours) |
+|--------|------|-----|--------------|
+| Throughput (Kbps) | 6663.2 | 6387.9 | **7103.8 ✓** |
+| Packet Loss (%) | 13.22 | 15.10 | **0.53 ✓** |
+| Latency (ms) | 278.7 | 297.0 | **18.2 ✓** |
+| PSNR (dB) | 19.96 | 16.49 | **47.55 ✓** |
+| MOS Score | 2 (Poor) | 1 (Bad) | **5 (Excellent) ✓** |
+| Compromised nodes blocked | 0/11 | 0/11 | **2/11 ✓** |
+| Threat detection | 0% | 0% | **100% ✓** |
 
 ---
 
-## Fuzzy Logic Scoring Model
+## How It Works
 
-Nodes that pass security checks are evaluated using a weighted scoring system:
+The system runs a 3-stage decision pipeline for every node before routing:
 
-- Power consumption (25%)  
-- Packet loss (20%)  
-- Bandwidth and delay (20%)  
-- Authentication trust level (10%)  
-- Neighbor connectivity (15%)  
+```
+1. Security Validation  →  2. Fuzzy Scoring  →  3. Trust-Weighted Decision
+```
 
-Final Score = Base Score × Trust Multiplier
+### Stage 1 — 6-Step Security Pipeline
 
-This ensures that even high-performing nodes are excluded if they fail security validation.
+Every node must clear all six checks or it scores zero immediately:
+
+| Step | Check | Fail Action |
+|------|-------|-------------|
+| 1 | Subnet validation (IP in 10.0.0.0/24) | REJECTED |
+| 2 | Blacklist check | REJECTED |
+| 3 | Certificate validity (cert != NULL) | REJECTED + blacklisted |
+| 4 | Certificate pinning (hash match) | REJECTED + permanent blacklist |
+| 5 | CRL check (not revoked) | REJECTED |
+| 6 | HMAC-SHA256 challenge-response | REJECTED |
+
+
+### Stage 2 — Fuzzy Membership Scoring
+
+Nodes that pass security are scored 0–100 across five dimensions:
+
+```
+Score = (Power × 0.25) + (Loss × 0.20) + (BW+Delay × 0.20) + (Auth × 0.10) + (Neighbors × 0.15) − Penalties
+Final Score = Base Score × (Trust Multiplier / 100)
+```
+
+| Component | Weight | Rationale |
+|-----------|--------|-----------|
+| Power consumption | 25% | High power = doing something suspicious |
+| Packet loss | 20% | Core routing job |
+| BW + Delay | 20% | Core routing job |
+| Neighbour count | 15% | Routing flexibility |
+| Auth trust level | 10% | Hard gate is at multiplier level |
+
+### Stage 3 — Routing Decision
+
+h4 (raw score 79.74) and h2 (raw score 77.5) both get FinalScore = 0 due to security rejection. h3 (score 75.2, TRUSTED) is selected as the actual route.
+
+---
+
+## Path Deviation Demonstrated
+
+![Path Deviation](results.png)
+
+Under OSPF and RIP, h4 and h2 carry full traffic — the protocols have no way to know they're compromised. Under the Fuzzy protocol, both show 0 Mbps bandwidth because no traffic is ever routed through them.
 
 ---
 
 ## Experimental Setup
 
-- Platform: Mininet (Ubuntu 24.04)  
-- Controller: Ryu (OpenFlow)  
-- Topologies:
-  - Sprint ISP topology (11 nodes, 18 links)  
-  - Fat Tree topology (data center model)  
-- Traffic generation: iperf3  
+- **Platform:** Mininet on Ubuntu 24.04 with Open vSwitch
+- **Controller:** Ryu (OpenFlow)
+- **Topologies:** Sprint ISP (11 nodes, 18 links) + Fat Tree (6 hosts, 5 switches)
+- **Traffic:** iperf3 at 300–800 Kbps per flow
+- **Reference:** Sprint topology from Al-Jawad et al. (ISNCC) — same 1 Mbps link setup
 
-The Sprint topology and test setup closely follow existing research benchmarks. :contentReference[oaicite:1]{index=1}
+### Traffic Scenarios
 
----
-
-## Results
-
-The proposed system outperformed traditional routing protocols:
-
-- Higher throughput compared to OSPF and RIP  
-- Significant reduction in packet loss  
-- Lower latency under high traffic conditions  
-- Successful blocking of compromised nodes  
-- Automatic path deviation to trusted nodes  
-
-For example, nodes h4 and h2 achieved high performance scores but were rejected due to failed security checks, leading the system to select a slightly lower-performing but trusted node (h3). :contentReference[oaicite:2]{index=2}
+| Scenario | Rate | Purpose |
+|----------|------|---------|
+| t1 — Light load | 300 Kbps/flow | Baseline |
+| t2 — Heavy load | 800 Kbps/flow | Near-saturation |
+| t3 — Imbalanced | 200–800 Kbps mixed | Stress test |
+| t4 — Path deviation | Targeted via h4/h2 | Security demonstration |
 
 ---
 
-## Protocol Comparison
+## Comparison with Related Work
 
-| Feature | OSPF | RIP | Proposed System |
-|--------|------|-----|----------------|
-| Security Awareness | No | No | Yes |
-| Path Deviation | No | No | Yes |
-| Compromised Node Blocking | No | No | Yes |
-| Routing Basis | Cost | Hop Count | Fuzzy + Security |
+| Feature | Al-Jawad et al. | FDBGR (2023) | IFRA-GLB (2024) | Ours |
+|---------|----------------|--------------|-----------------|------|
+| Routing basis | Policy + NN | Fuzzy | Fuzzy + RL | Fuzzy + Security |
+| Security | None | None | None | 6-step pipeline |
+| Path deviation trigger | QoS violation | Resource demand | RL optimisation | Security failure |
+| Trust multiplier | No | No | No | **Yes** |
+| Platform | Mininet | MATLAB | MATLAB | Mininet |
 
----
-
-## Key Insight
-
-Traditional routing protocols optimize for performance alone. This project demonstrates that integrating security directly into routing decisions results in both improved performance and safer network behavior.
-
----
-
-## Limitations
-
-- Certificates are simulated rather than issued by a real CA  
-- Limited to small-scale topologies (11 nodes)  
-- Traffic generated synthetically using iperf3  
-
----
-
-## Future Work
-
-- Integration with real certificate authorities (X.509)  
-- Scaling to larger topologies (MIRA, ANSNET)  
-- Dynamic detection of compromised nodes  
-- Integration with reinforcement learning for adaptive routing  
-- Deployment in real-world SDN environments  
+The gap we address: every existing fuzzy routing paper treats all nodes as trustworthy. We identified that none of them prevent a compromised-but-fast node from being selected. Our trust multiplier zeroes out such nodes before routing.
 
 ---
 
 ## How to Run
 
 ### Requirements
-- Mininet
-- Python 3
-- Ryu Controller
+```bash
+sudo apt install mininet python3 ryu-manager
+```
 
-### Run Sprint Topology
+### Sprint Topology
+```bash
 sudo python3 sprint_topology/sprint_topology.py
+```
 
-### Run Fat Tree Topology
+### Fat Tree Topology
+```bash
 sudo python3 fat_tree_topology/fat_tree_topology.py
+```
+
+### CLI Commands
+```
+proto fuzzy / ospf / rip   — switch routing protocol
+t1 / t2 / t3 / t4          — run traffic scenarios
+table                       — show routing table with scores
+results                     — show protocol comparison
+security h2                 — show security pipeline result for a node
+detail h4                   — show full fuzzy score breakdown
+deviation                   — show path deviation report
+watch                       — live bandwidth monitor
+log                         — save bandwidth log to CSV
+```
 
 ---
 
-## Author
+## Limitations
 
-Disha Sharma  
-GitHub: https://github.com/dishasharma23-prog
+- Certificates are simulated as Python strings, not issued by a real CA
+- Scoped to 11 nodes — not tested at ISP scale
+- Compromised nodes are hardcoded for the experiment, not dynamically detected
+
+---
+
+## Future Work
+
+- Real X.509 certificate integration with live CRL updates
+- Dynamic threat detection via traffic anomaly analysis
+- Scaling to MIRA and ANSNET topologies
+- Multi-controller SDN environments
+- Reinforcement learning for adaptive routing (extending IFRA-GLB approach)
+- IoT and wireless network adaptation
+
+---
+
+## Authors
+
+**Disha Sharma** · [github.com/dishasharma23-prog](https://github.com/dishasharma23-prog)  
+Sujal Kishore · Zain Khan  
+NIIT University, Neemrana — NU302 R&D Project, Sem II AY2025–26  
+Supervised by Dr. Shweta Malwe
+
+---
+
+## References
+
+1. Al-Jawad et al., "Policy-based QoS Management Framework for SDNs," ISNCC, Middlesex University
+2. Gong & Rezaeipanah, "Fuzzy delay-bandwidth guaranteed routing for SDN," Multimedia Tools & Applications, Springer, 2023
+3. Wang et al., "Intelligent fuzzy reinforcement learning-based routing in SDN," Egyptian Informatics Journal, 2024
+4. Alnasser & Sun, "Fuzzy Logic Trust Model for Secure Routing in Smart Grid Networks," IEEE Access, 2017
+5. Wu et al., "AI Enabled Routing in Software Defined Networking," Applied Sciences, MDPI, 2020
